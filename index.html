@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <video id="video" autoplay playsinline muted></video>
+    <button id="start">Start recording</button>
+    <button id="stop" disabled>Stop recording</button>
+    <button id="download" disabled>Download</button>
+    <button id="switch">Switch Camera</button>
+
+    <script>
+      let mediaRecorder;
+      let recordedBlobs;
+
+      const videoElement = document.querySelector("video");
+      const startButton = document.querySelector("#start");
+      const stopButton = document.querySelector("#stop");
+      const downloadButton = document.querySelector("#download");
+      const switchButton = document.querySelector("#switch");
+
+      startButton.addEventListener("click", startRecording);
+      stopButton.addEventListener("click", stopRecording);
+      downloadButton.addEventListener("click", download);
+      switchButton.addEventListener("click", switchCamera);
+
+      let currentStream;
+
+      function stopMediaTracks(stream) {
+        stream.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }
+
+      async function switchCamera() {
+        if (typeof currentStream !== "undefined") {
+          stopMediaTracks(currentStream);
+        }
+
+        const videoDevices = (
+          await navigator.mediaDevices.enumerateDevices()
+        ).filter((device) => device.kind === "videoinput");
+
+        const currentDeviceIndex = videoDevices.findIndex(
+          (device) =>
+            device.deviceId ===
+            currentStream?.getVideoTracks()[0].getSettings().deviceId
+        );
+        const newDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+
+        const constraints = {
+          video: true,
+          audio: true
+        };
+
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        window.stream = currentStream;
+        videoElement.srcObject = currentStream;
+      }
+
+      async function startRecording() {
+        recordedBlobs = [];
+        let options = { mimeType: "video/webm;codecs=vp9,opus" };
+        try {
+          mediaRecorder = new MediaRecorder(window.stream, options);
+        } catch (e) {
+          console.error("Exception while creating MediaRecorder:", e);
+          return;
+        }
+
+        console.log(
+          "Created MediaRecorder",
+          mediaRecorder,
+          "with options",
+          options
+        );
+        startButton.disabled = true;
+        stopButton.disabled = false;
+        downloadButton.disabled = true;
+        mediaRecorder.onstop = (event) => {
+          console.log("Recorder stopped: ", event);
+        };
+        mediaRecorder.ondataavailable = handleDataAvailable;
+        mediaRecorder.start(10);
+        console.log("MediaRecorder started", mediaRecorder);
+      }
+
+      function handleDataAvailable(event) {
+        if (event.data && event.data.size > 0) {
+          recordedBlobs.push(event.data);
+        }
+      }
+
+      function stopRecording() {
+        stopButton.disabled = true;
+        downloadButton.disabled = false;
+        mediaRecorder.stop();
+      }
+      function download() {
+        const blob = new Blob(recordedBlobs, { type: "video/webm" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = url;
+        a.download = "test.mp4"; // This doesn't change the file type to mp4, you will need to convert it manually
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }, 100);
+      }
+
+      async function init() {
+        const constraints = {
+          audio: true,
+          video: true
+        };
+
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        window.stream = currentStream;
+        videoElement.srcObject = currentStream;
+      }
+
+      init();
+    </script>
+  </body>
+</html>
